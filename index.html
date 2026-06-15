@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Kvíz</title>
+<style>
+  :root{
+    --bg:#0f1226; --bg2:#1a1f3d; --card:#222a52; --line:#33407a;
+    --txt:#eef1ff; --muted:#9aa4d8; --accent:#7c5cff; --accent2:#ff5c9d;
+    --a:#e84a5f; --b:#2d6cdf; --c:#f2a93b; --d:#2bb673;
+    --good:#2bb673; --bad:#e84a5f; --gold:#ffd34d;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 800px at 70% -10%, #2a2270 0%, transparent 60%),
+               radial-gradient(900px 700px at -10% 110%, #4a1d5e 0%, transparent 55%),
+               var(--bg);
+    color:var(--txt); min-height:100%;
+  }
+  .wrap{max-width:1000px;margin:0 auto;padding:18px}
+  .center{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center}
+  h1{font-size:clamp(28px,5vw,54px);margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:clamp(20px,3vw,30px);margin:0 0 14px}
+  .muted{color:var(--muted)}
+  .card{background:linear-gradient(180deg,var(--card),var(--bg2));border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:14px;font-weight:700;transition:transform .06s ease, filter .15s ease}
+  button:active{transform:scale(.97)}
+  .btn{background:var(--accent);color:#fff;padding:14px 22px;font-size:17px}
+  .btn:hover{filter:brightness(1.08)}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+  .btn.big{font-size:22px;padding:18px 30px;border-radius:16px}
+  .btn.wide{width:100%}
+  input,textarea{font-family:inherit;width:100%;background:#0e1430;border:1px solid var(--line);border-radius:12px;color:var(--txt);padding:13px 14px;font-size:16px;outline:none}
+  input:focus,textarea:focus{border-color:var(--accent)}
+  label{display:block;font-size:13px;color:var(--muted);margin:0 0 6px;font-weight:600}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .pill{display:inline-block;background:#0e1430;border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:13px;color:var(--muted)}
+  .hide{display:none!important}
+
+  /* join code */
+  .code{font-size:clamp(40px,9vw,86px);font-weight:900;letter-spacing:.12em;color:var(--gold);font-variant-numeric:tabular-nums}
+  .qr{background:#fff;padding:12px;border-radius:14px;display:inline-block}
+  .qr img{display:block;width:200px;height:200px}
+
+  /* answer grid */
+  .answers{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%}
+  .ans{position:relative;color:#fff;min-height:96px;border-radius:16px;font-size:clamp(16px,2.4vw,22px);padding:18px;display:flex;align-items:center;gap:12px;text-align:left;word-break:break-word}
+  .ans .lt{font-weight:900;font-size:26px;opacity:.9;flex:0 0 auto}
+  .ans.A{background:var(--a)} .ans.B{background:var(--b)} .ans.C{background:var(--c)} .ans.D{background:var(--d)}
+  .ans.dim{opacity:.32}
+  .ans.win{outline:4px solid #fff;box-shadow:0 0 0 6px rgba(255,255,255,.25)}
+  .ans .chk{position:absolute;top:8px;right:10px;font-size:22px}
+
+  /* player answer buttons (mobile, big) */
+  .pbtns{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;flex:1}
+  .pbtn{color:#fff;font-size:40px;font-weight:900;border-radius:18px;min-height:120px;display:flex;align-items:center;justify-content:center}
+  .pbtn.A{background:var(--a)} .pbtn.B{background:var(--b)} .pbtn.C{background:var(--c)} .pbtn.D{background:var(--d)}
+  .pbtn:disabled{opacity:.35}
+
+  /* timer bar */
+  .timerbar{height:14px;background:#0e1430;border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+  .timerfill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:100%;transition:width 1s linear}
+  .big-timer{font-size:clamp(50px,12vw,120px);font-weight:900;font-variant-numeric:tabular-nums;line-height:1}
+
+  /* leaderboard */
+  .lb{display:flex;flex-direction:column;gap:10px;width:100%;max-width:640px;margin:0 auto}
+  .lb .item{display:flex;align-items:center;gap:14px;background:#0e1430;border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+  .lb .rank{font-weight:900;font-size:22px;width:42px;color:var(--muted)}
+  .lb .nm{flex:1;font-weight:700;font-size:18px;text-align:left}
+  .lb .sc{font-weight:900;font-size:20px;color:var(--gold);font-variant-numeric:tabular-nums}
+  .lb .item.top1{border-color:var(--gold);box-shadow:0 0 0 2px rgba(255,211,77,.2)}
+  .lb .item.top1 .rank{color:var(--gold)}
+
+  /* editor question card */
+  .qcard{background:#0e1430;border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+  .qcard .qhead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .qcard .qnum{font-weight:900;color:var(--accent2)}
+  .ansedit{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+  .ansrow{display:flex;align-items:center;gap:8px;background:#141b3d;border:1px solid var(--line);border-radius:10px;padding:8px}
+  .ansrow .lt{font-weight:900;width:22px;text-align:center}
+  .ansrow input{border:none;background:transparent;padding:6px}
+  .ansrow.correct{outline:2px solid var(--good)}
+  .ansrow .pick{flex:0 0 auto;background:#222a52;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 10px;font-size:12px}
+  .ansrow.correct .pick{background:var(--good);color:#fff;border-color:var(--good)}
+
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#000;border:1px solid var(--line);padding:12px 18px;border-radius:12px;font-weight:600;z-index:50}
+  .grid-players{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:14px}
+  .ptag{background:#0e1430;border:1px solid var(--line);border-radius:999px;padding:8px 16px;font-weight:700}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .logo{font-weight:900;letter-spacing:-.02em;font-size:20px}
+  .logo span{color:var(--accent2)}
+  @media(max-width:560px){ .answers{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div id="app" class="wrap"></div>
+<div id="toast"></div>
+
+<!-- Firebase compat SDK (jednoduché na vložení do single-file appky) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+/* ============== FIREBASE CONFIG ============== */
+const firebaseConfig = {
+  apiKey: "AIzaSyBly2cA0-82AdkIFkUKH50FQBHkSQ3_pVc",
+  authDomain: "kviz-d1b6d.firebaseapp.com",
+  databaseURL: "https://kviz-d1b6d-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "kviz-d1b6d",
+  storageBucket: "kviz-d1b6d.firebasestorage.app",
+  messagingSenderId: "878028470759",
+  appId: "1:878028470759:web:d538524317fc4b76742542"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+/* ============== POMOCNÉ ============== */
+const $ = (s,el=document)=>el.querySelector(s);
+const app = document.getElementById('app');
+const LETTERS = ['A','B','C','D'];
+const QUESTION_TIME = 30;        // sekund na otázku
+const MAX_POINTS = 1000;         // max bodů za nejrychlejší správnou odpověď
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function toast(msg){const t=document.getElementById('toast');t.innerHTML='<div class="toast">'+esc(msg)+'</div>';setTimeout(()=>t.innerHTML='',2200);}
+function genCode(){return String(Math.floor(100000+Math.random()*900000));}
+function qrUrl(data){return 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data='+encodeURIComponent(data);}
+
+/* výchozí otázky (host si je přepíše v editoru) */
+const DEFAULT_QS = [
+  {q:'Hlavní město České republiky?',a:['Brno','Praha','Ostrava','Plzeň'],correct:1},
+  {q:'Kolik je 7 × 8?',a:['54','56','64','58'],correct:1},
+  {q:'Která planeta je nejblíže Slunci?',a:['Venuše','Mars','Merkur','Země'],correct:2},
+  {q:'Kdo napsal Babičku?',a:['Karel Čapek','Božena Němcová','Jan Neruda','Karel Havlíček'],correct:1},
+  {q:'Nejdelší řeka světa?',a:['Amazonka','Nil','Mississippi','Jang-c-ťiang'],correct:0},
+  {q:'Chemická značka zlata?',a:['Zl','Au','Ag','Go'],correct:1},
+  {q:'V kterém roce skončila 2. světová válka?',a:['1943','1944','1945','1946'],correct:2},
+  {q:'Kolik má člověk smyslů (tradičně)?',a:['3','4','5','6'],correct:2},
+];
+
+/* ============== ROUTER ============== */
+const params = new URLSearchParams(location.search);
+const isHost = params.has('host');
+if(isHost){ Host.init(); } else { Player.init(); }
+</script>
+
+<script>
+/* ====================================================================== */
+/* ============================== HOST ================================== */
+/* ====================================================================== */
+const Host = (()=>{
+  let code=null, ref=null, questions=[], unsub=[];
+
+  function init(){
+    code = genCode();
+    ref = db.ref('games/'+code);
+    // založ hru
+    ref.set({
+      status:'editing',
+      createdAt:firebase.database.ServerValue.TIMESTAMP,
+      current:-1,
+      questionTime:QUESTION_TIME
+    });
+    // úklid při zavření
+    window.addEventListener('beforeunload',()=>{ try{ref.remove();}catch(e){} });
+    questions = JSON.parse(JSON.stringify(DEFAULT_QS));
+    renderEditor();
+  }
+
+  /* ---------- EDITOR ---------- */
+  function renderEditor(){
+    let qs = questions.map((q,i)=>`
+      <div class="qcard">
+        <div class="qhead">
+          <span class="qnum">Otázka ${i+1}</span>
+          <button class="btn ghost" style="margin-left:auto;padding:6px 12px;font-size:13px" onclick="Host.delQ(${i})">Smazat</button>
+        </div>
+        <input data-q="${i}" placeholder="Text otázky" value="${esc(q.q)}" oninput="Host.setQ(${i},this.value)">
+        <div class="ansedit">
+          ${q.a.map((ans,j)=>`
+            <div class="ansrow ${q.correct===j?'correct':''}">
+              <span class="lt" style="color:var(--${['a','b','c','d'][j]})">${LETTERS[j]}</span>
+              <input placeholder="Odpověď ${LETTERS[j]}" value="${esc(ans)}" oninput="Host.setA(${i},${j},this.value)">
+              <button class="pick" onclick="Host.setCorrect(${i},${j})">${q.correct===j?'✓ správně':'označit'}</button>
+            </div>`).join('')}
+        </div>
+      </div>`).join('');
+
+    app.innerHTML = `
+      <div class="topbar">
+        <div class="logo">Kvíz<span>.</span></div>
+        <span class="pill">Moderátor · příprava</span>
+      </div>
+      <div class="card">
+        <h2>Otázky</h2>
+        <p class="muted" style="margin-top:-6px">Uprav text, vyplň 4 odpovědi a u jedné klikni „označit" jako správnou. Body se počítají podle rychlosti (Kahoot styl), limit ${QUESTION_TIME} s.</p>
+        ${qs}
+        <div class="row" style="margin-top:6px">
+          <button class="btn ghost" onclick="Host.addQ()">+ Přidat otázku</button>
+          <button class="btn" style="margin-left:auto" onclick="Host.startLobby()">Spustit hru →</button>
+        </div>
+      </div>`;
+  }
+  function setQ(i,v){questions[i].q=v;}
+  function setA(i,j,v){questions[i].a[j]=v;}
+  function setCorrect(i,j){questions[i].correct=j;renderEditor();}
+  function delQ(i){ if(questions.length<=1){toast('Aspoň jedna otázka musí zůstat');return;} questions.splice(i,1);renderEditor(); }
+  function addQ(){ questions.push({q:'',a:['','','',''],correct:0}); renderEditor(); setTimeout(()=>{window.scrollTo(0,document.body.scrollHeight);},50); }
+
+  function validate(){
+    for(let i=0;i<questions.length;i++){
+      const q=questions[i];
+      if(!q.q.trim()) return 'Otázka '+(i+1)+' nemá text.';
+      for(let j=0;j<4;j++) if(!q.a[j].trim()) return 'Otázka '+(i+1)+': chybí odpověď '+LETTERS[j]+'.';
+      if(q.correct==null||q.correct<0) return 'Otázka '+(i+1)+': není označená správná odpověď.';
+    }
+    return null;
+  }
+
+  /* ---------- LOBBY ---------- */
+  function startLobby(){
+    const err=validate(); if(err){toast(err);return;}
+    ref.child('questions').set(questions);
+    ref.child('status').set('lobby');
+    renderLobby();
+  }
+
+  function renderLobby(){
+    const joinUrl = location.origin+location.pathname;
+    app.innerHTML = `
+      <div class="topbar">
+        <div class="logo">Kvíz<span>.</span></div>
+        <span class="pill">Připojování hráčů</span>
+      </div>
+      <div class="card center" style="min-height:auto;padding:30px">
+        <p class="muted" style="margin:0">Připoj se na</p>
+        <h2 style="margin:4px 0 2px">${esc(joinUrl.replace(/^https?:\/\//,''))}</h2>
+        <p class="muted" style="margin:0 0 10px">a zadej kód</p>
+        <div class="code">${code}</div>
+        <div class="qr" style="margin:16px 0"><img src="${qrUrl(joinUrl+'?join='+code)}" alt="QR"></div>
+        <div id="plist" class="grid-players"></div>
+        <div class="row" style="margin-top:22px">
+          <button class="btn big" onclick="Host.startGame()">Spustit kvíz →</button>
+        </div>
+        <p class="muted" id="pcount" style="margin-top:10px">0 hráčů připojeno</p>
+      </div>`;
+    const pl = ref.child('players');
+    const cb = pl.on('value',snap=>{
+      const players=snap.val()||{};
+      const names=Object.values(players).map(p=>p.name);
+      $('#plist').innerHTML = names.map(n=>'<span class="ptag">'+esc(n)+'</span>').join('');
+      $('#pcount').textContent = names.length+(names.length===1?' hráč připojen':' hráčů připojeno');
+    });
+    unsub.push(()=>pl.off('value',cb));
+  }
+
+  function startGame(){
+    ref.child('players').once('value',snap=>{
+      if(!snap.val()){toast('Zatím se nikdo nepřipojil');return;}
+      cleanup();
+      goToQuestion(0);
+    });
+  }
+
+  /* ---------- PRŮBĚH OTÁZKY ---------- */
+  function goToQuestion(idx){
+    const q=questions[idx];
+    const startAt = Date.now();
+    ref.update({
+      status:'question',
+      current:idx,
+      questionStart:startAt
+    });
+    // reset odpovědí pro tuto otázku se řeší přes index v answers/idx
+    renderQuestion(idx,q,startAt);
+  }
+
+  function renderQuestion(idx,q,startAt){
+    cleanup();
+    app.innerHTML = `
+      <div class="topbar">
+        <div class="logo">Kvíz<span>.</span></div>
+        <span class="pill">Otázka ${idx+1} / ${questions.length}</span>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:18px;margin-bottom:14px">
+          <div class="big-timer" id="timer">${QUESTION_TIME}</div>
+          <div style="flex:1">
+            <h2 style="margin:0">${esc(q.q)}</h2>
+            <div class="timerbar" style="margin-top:12px"><div class="timerfill" id="tfill"></div></div>
+          </div>
+          <div style="text-align:right">
+            <div class="muted">odpovědělo</div>
+            <div style="font-size:32px;font-weight:900" id="answered">0</div>
+          </div>
+        </div>
+        <div class="answers" id="ansgrid">
+          ${q.a.map((a,j)=>`<div class="ans ${LETTERS[j]}" id="ans${j}"><span class="lt">${LETTERS[j]}</span><span>${esc(a)}</span></div>`).join('')}
+        </div>
+        <div class="row" style="margin-top:16px">
+          <button class="btn ghost" id="revealBtn" onclick="Host.reveal(${idx})">Ukončit & ukázat výsledek</button>
+        </div>
+      </div>`;
+
+    // sleduj počet odpovědí
+    const ansRef = ref.child('answers/'+idx);
+    const cb = ansRef.on('value',snap=>{
+      const n = snap.numChildren();
+      $('#answered') && ($('#answered').textContent=n);
+      ref.child('players').once('value',ps=>{
+        const total = ps.numChildren();
+        if(total>0 && n>=total){ /* všichni odpověděli */ }
+      });
+    });
+    unsub.push(()=>ansRef.off('value',cb));
+
+    // časovač
+    let remaining=QUESTION_TIME;
+    $('#tfill').style.width='100%';
+    requestAnimationFrame(()=>{ $('#tfill') && ($('#tfill').style.width='0%'); $('#tfill') && ($('#tfill').style.transition='width '+QUESTION_TIME+'s linear'); });
+    const tick=setInterval(()=>{
+      remaining--;
+      if($('#timer')) $('#timer').textContent=Math.max(0,remaining);
+      if(remaining<=0){ clearInterval(tick); reveal(idx); }
+    },1000);
+    unsub.push(()=>clearInterval(tick));
+  }
+
+  /* ---------- VYHODNOCENÍ ---------- */
+  function reveal(idx){
+    cleanup();
+    const q=questions[idx];
+    ref.child('status').set('reveal');
+
+    ref.child('answers/'+idx).once('value',ansSnap=>{
+      const answers=ansSnap.val()||{};
+      ref.child('players').once('value',pSnap=>{
+        const players=pSnap.val()||{};
+        // spočítej body
+        const updates={};
+        let fastest=null;
+        Object.entries(answers).forEach(([pid,a])=>{
+          let pts=0;
+          if(a.choice===q.correct){
+            const frac = Math.max(0, 1 - (a.t/(QUESTION_TIME*1000)));
+            pts = Math.round(500 + 500*frac); // 500 base + až 500 za rychlost
+            if(!fastest || a.t<fastest.t) fastest={pid,t:a.t,name:(players[pid]||{}).name};
+          }
+          const cur=(players[pid]||{}).score||0;
+          updates['players/'+pid+'/score']=cur+pts;
+          updates['players/'+pid+'/lastPts']=pts;
+        });
+        ref.update(updates).then(()=>{
+          ref.child('players').once('value',ps2=>{
+            renderReveal(idx,q,ps2.val()||{},fastest);
+          });
+        });
+      });
+    });
+  }
+
+  function renderReveal(idx,q,players,fastest){
+    const board = Object.entries(players)
+      .map(([id,p])=>({name:p.name,score:p.score||0,lastPts:p.lastPts||0}))
+      .sort((a,b)=>b.score-a.score).slice(0,8);
+    const last = idx>=questions.length-1;
+    app.innerHTML = `
+      <div class="topbar">
+        <div class="logo">Kvíz<span>.</span></div>
+        <span class="pill">Výsledek otázky ${idx+1}</span>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">${esc(q.q)}</h2>
+        <div class="answers" id="ansgrid">
+          ${q.a.map((a,j)=>`<div class="ans ${LETTERS[j]} ${j===q.correct?'win':'dim'}" >
+              <span class="lt">${LETTERS[j]}</span><span>${esc(a)}</span>
+              ${j===q.correct?'<span class="chk">✓</span>':''}
+            </div>`).join('')}
+        </div>
+        ${fastest?`<p style="text-align:center;margin:16px 0 4px">⚡ Nejrychlejší správně: <b style="color:var(--gold)">${esc(fastest.name||'?')}</b></p>`:'<p style="text-align:center;color:var(--muted);margin:16px 0 4px">Nikdo neodpověděl správně</p>'}
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2 style="margin-top:0">Pořadí</h2>
+        <div class="lb">
+          ${board.map((p,i)=>`<div class="item ${i===0?'top1':''}">
+              <span class="rank">${i+1}.</span><span class="nm">${esc(p.name)}</span>
+              ${p.lastPts?`<span class="muted" style="font-size:13px">+${p.lastPts}</span>`:''}
+              <span class="sc">${p.score}</span></div>`).join('')}
+        </div>
+        <div class="row" style="margin-top:18px;justify-content:center">
+          ${last
+            ? `<button class="btn big" onclick="Host.finish()">Konec – velký žebříček 🏆</button>`
+            : `<button class="btn big" onclick="Host.next(${idx})">Další otázka →</button>`}
+        </div>
+      </div>`;
+  }
+
+  function next(idx){ goToQuestion(idx+1); }
+
+  function finish(){
+    cleanup();
+    ref.child('status').set('final');
+    ref.child('players').once('value',snap=>{
+      const players=snap.val()||{};
+      const board=Object.values(players).map(p=>({name:p.name,score:p.score||0})).sort((a,b)=>b.score-a.score);
+      const podium=board.slice(0,3), rest=board.slice(3,10);
+      app.innerHTML=`
+        <div class="center">
+          <h1>🏆 Konec kvízu</h1>
+          <div class="card" style="width:100%;max-width:640px;margin-top:10px">
+            ${podium.map((p,i)=>`<div class="item top1" style="margin-bottom:10px;display:flex;align-items:center;gap:14px;background:#0e1430;border:1px solid var(--line);border-radius:14px;padding:14px 16px">
+                <span style="font-size:30px">${['🥇','🥈','🥉'][i]}</span>
+                <span class="nm" style="flex:1;text-align:left;font-weight:800;font-size:20px">${esc(p.name)}</span>
+                <span class="sc" style="font-size:24px;color:var(--gold);font-weight:900">${p.score}</span>
+              </div>`).join('')}
+            ${rest.length?'<div class="lb" style="margin-top:8px">'+rest.map((p,i)=>`<div class="item"><span class="rank">${i+4}.</span><span class="nm">${esc(p.name)}</span><span class="sc">${p.score}</span></div>`).join('')+'</div>':''}
+          </div>
+          <button class="btn ghost" style="margin-top:18px" onclick="location.reload()">Nový kvíz</button>
+        </div>`;
+      // hru necháme chvíli žít, ať hráči vidí finále; smaže se při zavření okna
+    });
+  }
+
+  function cleanup(){ unsub.forEach(f=>{try{f();}catch(e){}}); unsub=[]; }
+
+  return {init,setQ,setA,setCorrect,delQ,addQ,startLobby,startGame,reveal,next,finish};
+})();
+</script>
+
+<script>
+/* ====================================================================== */
+/* ============================= PLAYER ================================= */
+/* ====================================================================== */
+const Player = (()=>{
+  let code=null, name=null, pid=null, ref=null, unsub=[], answeredFor=-1, qStart=0, lastStatus=null;
+
+  function init(){
+    const pre = new URLSearchParams(location.search).get('join')||'';
+    renderJoin(pre);
+  }
+
+  function renderJoin(preCode){
+    app.innerHTML=`
+      <div class="center">
+        <h1>Kvíz<span style="color:var(--accent2)">.</span></h1>
+        <div class="card" style="width:100%;max-width:420px;text-align:left">
+          <label>Kód hry</label>
+          <input id="code" inputmode="numeric" maxlength="6" placeholder="6 číslic" value="${esc(preCode)}" style="font-size:24px;letter-spacing:.15em;text-align:center;font-weight:800">
+          <label style="margin-top:14px">Tvoje jméno</label>
+          <input id="name" maxlength="20" placeholder="Jak ti budou říkat">
+          <button class="btn wide big" style="margin-top:18px" onclick="Player.join()">Připojit se →</button>
+          <p class="muted" id="msg" style="text-align:center;margin:12px 0 0"></p>
+        </div>
+      </div>`;
+    if(preCode) setTimeout(()=>$('#name').focus(),100);
+  }
+
+  function join(){
+    code=($('#code').value||'').trim();
+    name=($('#name').value||'').trim();
+    if(!/^\d{6}$/.test(code)){$('#msg').textContent='Kód má 6 číslic.';return;}
+    if(!name){$('#msg').textContent='Vyplň jméno.';return;}
+    const g=db.ref('games/'+code);
+    g.child('status').once('value',s=>{
+      if(!s.exists()){$('#msg').textContent='Hra s tímto kódem neexistuje.';return;}
+      ref=g;
+      const pRef=ref.child('players').push();
+      pid=pRef.key;
+      pRef.set({name,score:0}).then(()=>{
+        // odpoj hráče když zavře
+        pRef.onDisconnect && null; // necháme záznam, ať se neztrácí skóre
+        listen();
+      });
+    });
+  }
+
+  function listen(){
+    const sRef=ref.child('status');
+    const cRef=ref.child('current');
+    const cb=ref.on('value',snap=>{
+      const g=snap.val(); if(!g) {screenInfo('Hra byla ukončena.');return;}
+      const status=g.status, cur=g.current;
+      if(status==='lobby'){ screenWaiting('Připojeno! Čekej, až moderátor spustí kvíz.'); }
+      else if(status==='question'){ renderAnswer(cur, g.questions, g.questionStart); }
+      else if(status==='reveal'){ renderResult(cur, g); }
+      else if(status==='final'){ renderFinal(g); }
+    });
+    unsub.push(()=>ref.off('value',cb));
+  }
+
+  function screenWaiting(t){
+    app.innerHTML=`<div class="center"><h2>${esc(name)}</h2><div class="card" style="max-width:420px"><p style="margin:0">${esc(t)}</p></div></div>`;
+  }
+  function screenInfo(t){
+    app.innerHTML=`<div class="center"><div class="card" style="max-width:420px"><p style="margin:0">${esc(t)}</p><button class="btn ghost wide" style="margin-top:14px" onclick="location.href=location.pathname">Zpět</button></div></div>`;
+  }
+
+  function renderAnswer(idx, questions, qStartTs){
+    if(answeredFor===idx){ return; } // už odpověděl – nepřekresluj tlačítka
+    qStart = qStartTs || Date.now();
+    app.innerHTML=`
+      <div style="min-height:100vh;display:flex;flex-direction:column;padding:16px;gap:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="pill">Otázka ${idx+1}</span>
+          <span class="pill" id="ptimer">${QUESTION_TIME}s</span>
+        </div>
+        <div class="pbtns" id="pbtns">
+          ${LETTERS.map((l,j)=>`<button class="pbtn ${l}" onclick="Player.answer(${idx},${j})">${l}</button>`).join('')}
+        </div>
+      </div>`;
+    // odpočet
+    let remaining=QUESTION_TIME;
+    const tick=setInterval(()=>{
+      remaining = Math.max(0, QUESTION_TIME - Math.floor((Date.now()-qStart)/1000));
+      if($('#ptimer')) $('#ptimer').textContent=remaining+'s';
+      if(remaining<=0){clearInterval(tick);}
+    },300);
+    unsub.push(()=>clearInterval(tick));
+  }
+
+  function answer(idx, choice){
+    if(answeredFor===idx) return;
+    answeredFor=idx;
+    const t=Date.now()-qStart; // ms od startu otázky
+    ref.child('answers/'+idx+'/'+pid).set({choice,t});
+    // potvrzení
+    document.querySelectorAll('.pbtn').forEach((b,j)=>{ b.disabled=true; if(j!==choice) b.style.opacity=.25; });
+    app.innerHTML=`<div class="center"><h2>Odpověď ${LETTERS[choice]} odeslána ✓</h2><p class="muted">Čekej na vyhodnocení…</p></div>`;
+  }
+
+  function renderResult(idx, g){
+    const me = (g.players&&g.players[pid])||{};
+    const correct = g.questions[idx].correct;
+    const myAns = g.answers&&g.answers[idx]&&g.answers[idx][pid];
+    const right = myAns && myAns.choice===correct;
+    answeredFor=-1; // reset pro další otázku
+    // pořadí
+    const board=Object.values(g.players||{}).map(p=>({name:p.name,score:p.score||0})).sort((a,b)=>b.score-a.score);
+    const myRank=board.findIndex(p=>p.name===me.name)+1;
+    app.innerHTML=`
+      <div class="center" style="padding:16px">
+        <h1 style="color:${right?'var(--good)':'var(--bad)'}">${right?'Správně! 🎉':(myAns?'Špatně 😕':'Bez odpovědi')}</h1>
+        ${right&&me.lastPts?`<p style="font-size:22px;margin:0">+${me.lastPts} bodů</p>`:''}
+        <div class="card" style="margin-top:14px;max-width:340px">
+          <p class="muted" style="margin:0">Tvé skóre</p>
+          <div style="font-size:40px;font-weight:900;color:var(--gold)">${me.score||0}</div>
+          <p class="muted" style="margin:6px 0 0">pořadí ${myRank}. z ${board.length}</p>
+        </div>
+      </div>`;
+  }
+
+  function renderFinal(g){
+    const board=Object.values(g.players||{}).map(p=>({name:p.name,score:p.score||0})).sort((a,b)=>b.score-a.score);
+    const me=(g.players&&g.players[pid])||{};
+    const myRank=board.findIndex(p=>p.name===me.name)+1;
+    const top=board[0];
+    const won = top && top.name===me.name;
+    app.innerHTML=`
+      <div class="center" style="padding:16px">
+        <h1>${won?'🏆 Vyhrál jsi!':'Konec kvízu'}</h1>
+        <div class="card" style="max-width:340px;margin-top:10px">
+          <p class="muted" style="margin:0">Skončil jsi na</p>
+          <div style="font-size:46px;font-weight:900;color:var(--gold)">${myRank}. místě</div>
+          <p style="margin:6px 0 0">se skóre <b>${me.score||0}</b></p>
+        </div>
+        ${top?`<p class="muted" style="margin-top:14px">Vítěz: <b style="color:var(--gold)">${esc(top.name)}</b> (${top.score})</p>`:''}
+      </div>`;
+  }
+
+  return {init,join,answer};
+})();
+</script>
+</body>
+</html>
