@@ -93,6 +93,10 @@
   .logo{font-weight:900;letter-spacing:-.02em;font-size:20px}
   .logo span{color:var(--accent2)}
   @media(max-width:560px){ .answers{grid-template-columns:1fr} }
+  .cdnum{font-size:clamp(120px,30vw,260px);font-weight:900;line-height:1;color:var(--gold);animation:pop .9s ease}
+  @keyframes pop{0%{transform:scale(.3);opacity:0}40%{transform:scale(1.15);opacity:1}100%{transform:scale(1)}}
+  .lb .item{animation:slidein .4s ease both}
+  @keyframes slidein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 </style>
 </head>
 <body>
@@ -262,15 +266,31 @@ const Host = (()=>{
 
   /* ---------- PRŮBĚH OTÁZKY ---------- */
   function goToQuestion(idx){
-    const q=questions[idx];
-    const startAt = Date.now();
-    ref.update({
-      status:'question',
-      current:idx,
-      questionStart:startAt
-    });
-    // reset odpovědí pro tuto otázku se řeší přes index v answers/idx
-    renderQuestion(idx,q,startAt);
+    cleanup();
+    // fáze odpočtu – synchronizovaně pro hráče i moderátora
+    ref.update({ status:'countdown', current:idx });
+    let n=3;
+    showCountdown(idx,n);
+    const cd=setInterval(()=>{
+      n--;
+      if(n>0){ showCountdown(idx,n); }
+      else{
+        clearInterval(cd);
+        const startAt=Date.now();
+        ref.update({ status:'question', current:idx, questionStart:startAt });
+        renderQuestion(idx,questions[idx],startAt);
+      }
+    },1000);
+    unsub.push(()=>clearInterval(cd));
+  }
+
+  function showCountdown(idx,n){
+    app.innerHTML=`
+      <div class="center">
+        <span class="pill">Otázka ${idx+1} / ${questions.length}</span>
+        <div class="cdnum">${n}</div>
+        <p class="muted">Připrav se…</p>
+      </div>`;
   }
 
   function renderQuestion(idx,q,startAt){
@@ -289,25 +309,46 @@ const Host = (()=>{
           </div>
           <div style="text-align:right">
             <div class="muted">odpovědělo</div>
-            <div style="font-size:32px;font-weight:900" id="answered">0</div>
+            <div style="font-size:32px;font-weight:900"><span id="answered">0</span><span class="muted" style="font-size:18px" id="totalp"></span></div>
           </div>
         </div>
         <div class="answers" id="ansgrid">
-          ${q.a.map((a,j)=>`<div class="ans ${LETTERS[j]}" id="ans${j}"><span class="lt">${LETTERS[j]}</span><span>${esc(a)}</span></div>`).join('')}
+          ${q.a.map((a,j)=>`<div class="ans ${LETTERS[j]}" id="ans${j}">
+              <span class="lt">${LETTERS[j]}</span><span style="flex:1">${esc(a)}</span>
+              <span class="votecount" id="vc${j}" style="font-weight:900;font-size:22px;min-width:30px;text-align:right">0</span>
+            </div>`).join('')}
+        </div>
+        <div class="votebars" id="votebars" style="margin-top:16px;display:flex;align-items:flex-end;gap:12px;height:120px">
+          ${q.a.map((a,j)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">
+              <div class="vbar ${LETTERS[j]}" id="vb${j}" style="width:100%;background:var(--${['a','b','c','d'][j]});border-radius:8px 8px 0 0;height:2%;transition:height .4s ease;min-height:4px"></div>
+              <div class="lt" style="margin-top:6px;font-weight:900;color:var(--${['a','b','c','d'][j]})">${LETTERS[j]}</div>
+            </div>`).join('')}
         </div>
         <div class="row" style="margin-top:16px">
-          <button class="btn ghost" id="revealBtn" onclick="Host.reveal(${idx})">Ukončit & ukázat výsledek</button>
+          <button class="btn" id="revealBtn" onclick="Host.reveal(${idx})">Ukončit & ukázat výsledek →</button>
         </div>
       </div>`;
 
-    // sleduj počet odpovědí
+    // sleduj odpovědi živě – počty hlasů na A/B/C/D
     const ansRef = ref.child('answers/'+idx);
     const cb = ansRef.on('value',snap=>{
+      const answers = snap.val()||{};
+      const counts=[0,0,0,0];
+      Object.values(answers).forEach(a=>{ if(a&&a.choice>=0&&a.choice<4) counts[a.choice]++; });
       const n = snap.numChildren();
+      const maxc = Math.max(1,...counts);
       $('#answered') && ($('#answered').textContent=n);
+      for(let j=0;j<4;j++){
+        const vc=$('#vc'+j); if(vc) vc.textContent=counts[j];
+        const vb=$('#vb'+j); if(vb) vb.style.height=Math.max(2,(counts[j]/maxc)*100)+'%';
+      }
       ref.child('players').once('value',ps=>{
         const total = ps.numChildren();
-        if(total>0 && n>=total){ /* všichni odpověděli */ }
+        $('#totalp') && ($('#totalp').textContent=' / '+total);
+        if(total>0 && n>=total && $('#revealBtn')){
+          $('#revealBtn').textContent='Všichni odpověděli – ukázat výsledek →';
+          $('#revealBtn').style.background='var(--good)';
+        }
       });
     });
     unsub.push(()=>ansRef.off('value',cb));
@@ -334,30 +375,36 @@ const Host = (()=>{
       const answers=ansSnap.val()||{};
       ref.child('players').once('value',pSnap=>{
         const players=pSnap.val()||{};
-        // spočítej body
+        // spočítej body + rozpad odpovědí
         const updates={};
         let fastest=null;
+        const counts=[0,0,0,0];
+        let correctN=0, wrongN=0;
         Object.entries(answers).forEach(([pid,a])=>{
+          if(a&&a.choice>=0&&a.choice<4) counts[a.choice]++;
           let pts=0;
           if(a.choice===q.correct){
+            correctN++;
             const frac = Math.max(0, 1 - (a.t/(QUESTION_TIME*1000)));
             pts = Math.round(500 + 500*frac); // 500 base + až 500 za rychlost
             if(!fastest || a.t<fastest.t) fastest={pid,t:a.t,name:(players[pid]||{}).name};
-          }
+          } else { wrongN++; }
           const cur=(players[pid]||{}).score||0;
           updates['players/'+pid+'/score']=cur+pts;
           updates['players/'+pid+'/lastPts']=pts;
         });
         ref.update(updates).then(()=>{
           ref.child('players').once('value',ps2=>{
-            renderReveal(idx,q,ps2.val()||{},fastest);
+            renderReveal(idx,q,ps2.val()||{},fastest,{counts,correctN,wrongN});
           });
         });
       });
     });
   }
 
-  function renderReveal(idx,q,players,fastest){
+  function renderReveal(idx,q,players,fastest,stats){
+    stats = stats||{counts:[0,0,0,0],correctN:0,wrongN:0};
+    const totalVotes = Math.max(1, stats.counts.reduce((a,b)=>a+b,0));
     const board = Object.entries(players)
       .map(([id,p])=>({name:p.name,score:p.score||0,lastPts:p.lastPts||0}))
       .sort((a,b)=>b.score-a.score).slice(0,8);
@@ -371,11 +418,16 @@ const Host = (()=>{
         <h2 style="margin-top:0">${esc(q.q)}</h2>
         <div class="answers" id="ansgrid">
           ${q.a.map((a,j)=>`<div class="ans ${LETTERS[j]} ${j===q.correct?'win':'dim'}" >
-              <span class="lt">${LETTERS[j]}</span><span>${esc(a)}</span>
+              <span class="lt">${LETTERS[j]}</span><span style="flex:1">${esc(a)}</span>
+              <span style="font-weight:900;font-size:18px">${stats.counts[j]}× (${Math.round(stats.counts[j]/totalVotes*100)}%)</span>
               ${j===q.correct?'<span class="chk">✓</span>':''}
             </div>`).join('')}
         </div>
-        ${fastest?`<p style="text-align:center;margin:16px 0 4px">⚡ Nejrychlejší správně: <b style="color:var(--gold)">${esc(fastest.name||'?')}</b></p>`:'<p style="text-align:center;color:var(--muted);margin:16px 0 4px">Nikdo neodpověděl správně</p>'}
+        <div class="row" style="justify-content:center;gap:30px;margin-top:16px">
+          <div style="text-align:center"><div style="font-size:30px;font-weight:900;color:var(--good)">${stats.correctN}</div><div class="muted">správně</div></div>
+          <div style="text-align:center"><div style="font-size:30px;font-weight:900;color:var(--bad)">${stats.wrongN}</div><div class="muted">špatně</div></div>
+        </div>
+        ${fastest?`<p style="text-align:center;margin:14px 0 4px">⚡ Nejrychlejší správně: <b style="color:var(--gold)">${esc(fastest.name||'?')}</b></p>`:'<p style="text-align:center;color:var(--muted);margin:14px 0 4px">Nikdo neodpověděl správně</p>'}
       </div>
       <div class="card" style="margin-top:16px">
         <h2 style="margin-top:0">Pořadí</h2>
@@ -383,7 +435,7 @@ const Host = (()=>{
           ${board.map((p,i)=>`<div class="item ${i===0?'top1':''}">
               <span class="rank">${i+1}.</span><span class="nm">${esc(p.name)}</span>
               ${p.lastPts?`<span class="muted" style="font-size:13px">+${p.lastPts}</span>`:''}
-              <span class="sc">${p.score}</span></div>`).join('')}
+              <span class="sc" data-score="${p.score}">0</span></div>`).join('')}
         </div>
         <div class="row" style="margin-top:18px;justify-content:center">
           ${last
@@ -391,6 +443,23 @@ const Host = (()=>{
             : `<button class="btn big" onclick="Host.next(${idx})">Další otázka →</button>`}
         </div>
       </div>`;
+    animateScores();
+  }
+
+  // napínavá animace: skóre se odpočítá nahoru
+  function animateScores(){
+    document.querySelectorAll('.sc[data-score]').forEach(el=>{
+      const target=parseInt(el.getAttribute('data-score'))||0;
+      if(target<=0){el.textContent='0';return;}
+      const dur=900, t0=performance.now();
+      function step(t){
+        const k=Math.min(1,(t-t0)/dur);
+        const eased=1-Math.pow(1-k,3);
+        el.textContent=Math.round(target*eased);
+        if(k<1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
   }
 
   function next(idx){ goToQuestion(idx+1); }
@@ -479,11 +548,22 @@ const Player = (()=>{
       const g=snap.val(); if(!g) {screenInfo('Hra byla ukončena.');return;}
       const status=g.status, cur=g.current;
       if(status==='lobby'){ screenWaiting('Připojeno! Čekej, až moderátor spustí kvíz.'); }
+      else if(status==='countdown'){ answeredFor=-1; if(lastStatus!=='countdown'||shownCdFor!==cur){ shownCdFor=cur; playerCountdown(cur); } }
       else if(status==='question'){ renderAnswer(cur, g.questions, g.questionStart); }
       else if(status==='reveal'){ renderResult(cur, g); }
       else if(status==='final'){ renderFinal(g); }
+      lastStatus=status;
     });
     unsub.push(()=>ref.off('value',cb));
+  }
+
+  let shownCdFor=-1;
+  function playerCountdown(cur){
+    let n=3;
+    const draw=()=>{ app.innerHTML=`<div class="center"><span class="pill">Otázka ${cur+1}</span><div class="cdnum">${n}</div><p class="muted">Připrav se…</p></div>`; };
+    draw();
+    const t=setInterval(()=>{ n--; if(n<=0){clearInterval(t);} else draw(); },1000);
+    unsub.push(()=>clearInterval(t));
   }
 
   function screenWaiting(t){
@@ -496,14 +576,20 @@ const Player = (()=>{
   function renderAnswer(idx, questions, qStartTs){
     if(answeredFor===idx){ return; } // už odpověděl – nepřekresluj tlačítka
     qStart = qStartTs || Date.now();
+    const q = (questions||[])[idx] || {q:'',a:['','','','']};
     app.innerHTML=`
       <div style="min-height:100vh;display:flex;flex-direction:column;padding:16px;gap:14px">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span class="pill">Otázka ${idx+1}</span>
           <span class="pill" id="ptimer">${QUESTION_TIME}s</span>
         </div>
-        <div class="pbtns" id="pbtns">
-          ${LETTERS.map((l,j)=>`<button class="pbtn ${l}" onclick="Player.answer(${idx},${j})">${l}</button>`).join('')}
+        <div class="card" style="padding:18px">
+          <h2 style="margin:0;font-size:clamp(20px,5.5vw,28px)">${esc(q.q)}</h2>
+        </div>
+        <div class="answers" id="pbtns" style="flex:1">
+          ${LETTERS.map((l,j)=>`<button class="ans ${l}" style="cursor:pointer;border:none" onclick="Player.answer(${idx},${j})">
+              <span class="lt">${l}</span><span>${esc((q.a||[])[j]||'')}</span>
+            </button>`).join('')}
         </div>
       </div>`;
     // odpočet
@@ -521,9 +607,7 @@ const Player = (()=>{
     answeredFor=idx;
     const t=Date.now()-qStart; // ms od startu otázky
     ref.child('answers/'+idx+'/'+pid).set({choice,t});
-    // potvrzení
-    document.querySelectorAll('.pbtn').forEach((b,j)=>{ b.disabled=true; if(j!==choice) b.style.opacity=.25; });
-    app.innerHTML=`<div class="center"><h2>Odpověď ${LETTERS[choice]} odeslána ✓</h2><p class="muted">Čekej na vyhodnocení…</p></div>`;
+    app.innerHTML=`<div class="center" style="padding:16px"><h2>Odpověď ${LETTERS[choice]} odeslána ✓</h2><p class="muted">Čekej na vyhodnocení…</p></div>`;
   }
 
   function renderResult(idx, g){
