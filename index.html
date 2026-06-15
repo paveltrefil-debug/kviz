@@ -269,7 +269,7 @@ const Host = (()=>{
     cleanup();
     // fáze odpočtu – synchronizovaně pro hráče i moderátora
     ref.update({ status:'countdown', current:idx });
-    let n=10;
+    let n=5;
     showCountdown(idx,n);
     const cd=setInterval(()=>{
       n--;
@@ -315,13 +315,6 @@ const Host = (()=>{
         <div class="answers" id="ansgrid">
           ${q.a.map((a,j)=>`<div class="ans ${LETTERS[j]}" id="ans${j}">
               <span class="lt">${LETTERS[j]}</span><span style="flex:1">${esc(a)}</span>
-              <span class="votecount" id="vc${j}" style="font-weight:900;font-size:22px;min-width:30px;text-align:right">0</span>
-            </div>`).join('')}
-        </div>
-        <div class="votebars" id="votebars" style="margin-top:16px;display:flex;align-items:flex-end;gap:12px;height:120px">
-          ${q.a.map((a,j)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">
-              <div class="vbar ${LETTERS[j]}" id="vb${j}" style="width:100%;background:var(--${['a','b','c','d'][j]});border-radius:8px 8px 0 0;height:2%;transition:height .4s ease;min-height:4px"></div>
-              <div class="lt" style="margin-top:6px;font-weight:900;color:var(--${['a','b','c','d'][j]})">${LETTERS[j]}</div>
             </div>`).join('')}
         </div>
         <div class="row" style="margin-top:16px">
@@ -329,19 +322,11 @@ const Host = (()=>{
         </div>
       </div>`;
 
-    // sleduj odpovědi živě – počty hlasů na A/B/C/D
+    // sleduj jen počet odpovědí (rozpad hlasů je až ve výsledku)
     const ansRef = ref.child('answers/'+idx);
     const cb = ansRef.on('value',snap=>{
-      const answers = snap.val()||{};
-      const counts=[0,0,0,0];
-      Object.values(answers).forEach(a=>{ if(a&&a.choice>=0&&a.choice<4) counts[a.choice]++; });
       const n = snap.numChildren();
-      const maxc = Math.max(1,...counts);
       $('#answered') && ($('#answered').textContent=n);
-      for(let j=0;j<4;j++){
-        const vc=$('#vc'+j); if(vc) vc.textContent=counts[j];
-        const vb=$('#vb'+j); if(vb) vb.style.height=Math.max(2,(counts[j]/maxc)*100)+'%';
-      }
       ref.child('players').once('value',ps=>{
         const total = ps.numChildren();
         $('#totalp') && ($('#totalp').textContent=' / '+total);
@@ -405,9 +390,11 @@ const Host = (()=>{
   function renderReveal(idx,q,players,fastest,stats){
     stats = stats||{counts:[0,0,0,0],correctN:0,wrongN:0};
     const totalVotes = Math.max(1, stats.counts.reduce((a,b)=>a+b,0));
+    // pořadí JEN za tuto otázku (lastPts), top 10 – celkové skóre zůstává skryté
     const board = Object.entries(players)
-      .map(([id,p])=>({name:p.name,score:p.score||0,lastPts:p.lastPts||0}))
-      .sort((a,b)=>b.score-a.score).slice(0,8);
+      .map(([id,p])=>({name:p.name,lastPts:p.lastPts||0}))
+      .filter(p=>p.lastPts>0)
+      .sort((a,b)=>b.lastPts-a.lastPts).slice(0,10);
     const last = idx>=questions.length-1;
     app.innerHTML = `
       <div class="topbar">
@@ -430,13 +417,13 @@ const Host = (()=>{
         ${fastest?`<p style="text-align:center;margin:14px 0 4px">⚡ Nejrychlejší správně: <b style="color:var(--gold)">${esc(fastest.name||'?')}</b></p>`:'<p style="text-align:center;color:var(--muted);margin:14px 0 4px">Nikdo neodpověděl správně</p>'}
       </div>
       <div class="card" style="margin-top:16px">
-        <h2 style="margin-top:0">Pořadí</h2>
-        <div class="lb">
+        <h2 style="margin-top:0">Body za tuto otázku</h2>
+        <p class="muted" style="margin-top:-6px">Celkové pořadí se ukáže až na konci 🤫</p>
+        ${board.length?`<div class="lb">
           ${board.map((p,i)=>`<div class="item ${i===0?'top1':''}">
               <span class="rank">${i+1}.</span><span class="nm">${esc(p.name)}</span>
-              ${p.lastPts?`<span class="muted" style="font-size:13px">+${p.lastPts}</span>`:''}
-              <span class="sc" data-score="${p.score}">0</span></div>`).join('')}
-        </div>
+              <span class="sc" data-score="${p.lastPts}">0</span></div>`).join('')}
+        </div>`:'<p class="muted">Nikdo nezískal body.</p>'}
         <div class="row" style="margin-top:18px;justify-content:center">
           ${last
             ? `<button class="btn big" onclick="Host.finish()">Konec – velký žebříček 🏆</button>`
@@ -464,33 +451,65 @@ const Host = (()=>{
 
   function next(idx){ goToQuestion(idx+1); }
 
+  let finalBoard=[], revealedCount=0;
+
   function finish(){
     cleanup();
-    ref.child('status').set('final');
     ref.child('players').once('value',snap=>{
       const players=snap.val()||{};
-      const board=Object.values(players).map(p=>({name:p.name,score:p.score||0})).sort((a,b)=>b.score-a.score);
-      const podium=board.slice(0,3), rest=board.slice(3,10);
-      app.innerHTML=`
-        <div class="center">
-          <h1>🏆 Konec kvízu</h1>
-          <div class="card" style="width:100%;max-width:640px;margin-top:10px">
-            ${podium.map((p,i)=>`<div class="item top1" style="margin-bottom:10px;display:flex;align-items:center;gap:14px;background:#0e1430;border:1px solid var(--line);border-radius:14px;padding:14px 16px">
-                <span style="font-size:30px">${['🥇','🥈','🥉'][i]}</span>
-                <span class="nm" style="flex:1;text-align:left;font-weight:800;font-size:20px">${esc(p.name)}</span>
-                <span class="sc" style="font-size:24px;color:var(--gold);font-weight:900">${p.score}</span>
-              </div>`).join('')}
-            ${rest.length?'<div class="lb" style="margin-top:8px">'+rest.map((p,i)=>`<div class="item"><span class="rank">${i+4}.</span><span class="nm">${esc(p.name)}</span><span class="sc">${p.score}</span></div>`).join('')+'</div>':''}
-          </div>
-          <button class="btn ghost" style="margin-top:18px" onclick="location.reload()">Nový kvíz</button>
-        </div>`;
-      // hru necháme chvíli žít, ať hráči vidí finále; smaže se při zavření okna
+      finalBoard=Object.values(players).map(p=>({name:p.name,score:p.score||0})).sort((a,b)=>b.score-a.score);
+      revealedCount=0; // kolik míst je odhaleno (odspoda)
+      ref.update({ status:'final', finalBoard, revealed:0 });
+      renderFinalHost();
     });
   }
 
+  // odhalí další místo odspoda nahoru
+  function revealNext(){
+    if(revealedCount>=finalBoard.length) return;
+    revealedCount++;
+    ref.child('revealed').set(revealedCount);
+    renderFinalHost();
+  }
+
+  function renderFinalHost(){
+    const n=finalBoard.length;
+    const shownFrom = n - revealedCount; // index, od kterého výš je odhaleno
+    const allRevealed = revealedCount>=n;
+    // seznam míst odspoda: poslední se odhalí první
+    let rows='';
+    for(let i=0;i<n;i++){
+      const place=i+1;
+      const p=finalBoard[i];
+      const isShown = i>=shownFrom;
+      const medal = place===1?'🥇':place===2?'🥈':place===3?'🥉':place+'.';
+      if(isShown){
+        rows+=`<div class="item ${place<=3?'top1':''}" style="${place===1?'border-color:var(--gold);background:#1a1f3d':''}">
+            <span class="rank" style="font-size:${place<=3?'26px':'18px'}">${medal}</span>
+            <span class="nm" style="font-size:${place===1?'24px':'18px'}">${esc(p.name)}</span>
+            <span class="sc" style="font-size:${place===1?'26px':'20px'}">${p.score}</span></div>`;
+      } else {
+        rows+=`<div class="item" style="opacity:.35"><span class="rank">${place}.</span><span class="nm">???</span><span class="sc">—</span></div>`;
+      }
+    }
+    app.innerHTML=`
+      <div class="topbar"><div class="logo">Kvíz<span>.</span></div><span class="pill">🏆 Finále</span></div>
+      <div class="card">
+        <h2 style="margin-top:0;text-align:center">${allRevealed?'🏆 Konečné pořadí':'Kdo to vyhrál? 🥁'}</h2>
+        <div class="lb" style="max-width:100%">${rows}</div>
+        <div class="row" style="margin-top:20px;justify-content:center">
+          ${allRevealed
+            ? `<button class="btn ghost" onclick="location.reload()">Nový kvíz</button>`
+            : `<button class="btn big" onclick="Host.revealNext()">Odhal ${revealedCount===0?'poslední místo':'další místo'} 🥁</button>`}
+        </div>
+      </div>`;
+  }
+
+  function finish_old(){}
+
   function cleanup(){ unsub.forEach(f=>{try{f();}catch(e){}}); unsub=[]; }
 
-  return {init,setQ,setA,setCorrect,delQ,addQ,startLobby,startGame,reveal,next,finish};
+  return {init,setQ,setA,setCorrect,delQ,addQ,startLobby,startGame,reveal,next,finish,revealNext};
 })();
 </script>
 
@@ -559,7 +578,7 @@ const Player = (()=>{
 
   let shownCdFor=-1;
   function playerCountdown(cur){
-    let n=10;
+    let n=5;
     const draw=()=>{ app.innerHTML=`<div class="center"><span class="pill">Otázka ${cur+1}</span><div class="cdnum">${n}</div><p class="muted">Připrav se…</p></div>`; };
     draw();
     const t=setInterval(()=>{ n--; if(n<=0){clearInterval(t);} else draw(); },1000);
@@ -616,36 +635,48 @@ const Player = (()=>{
     const myAns = g.answers&&g.answers[idx]&&g.answers[idx][pid];
     const right = myAns && myAns.choice===correct;
     answeredFor=-1; // reset pro další otázku
-    // pořadí
-    const board=Object.values(g.players||{}).map(p=>({name:p.name,score:p.score||0})).sort((a,b)=>b.score-a.score);
-    const myRank=board.findIndex(p=>p.name===me.name)+1;
     app.innerHTML=`
       <div class="center" style="padding:16px">
         <h1 style="color:${right?'var(--good)':'var(--bad)'}">${right?'Správně! 🎉':(myAns?'Špatně 😕':'Bez odpovědi')}</h1>
-        ${right&&me.lastPts?`<p style="font-size:22px;margin:0">+${me.lastPts} bodů</p>`:''}
-        <div class="card" style="margin-top:14px;max-width:340px">
-          <p class="muted" style="margin:0">Tvé skóre</p>
-          <div style="font-size:40px;font-weight:900;color:var(--gold)">${me.score||0}</div>
-          <p class="muted" style="margin:6px 0 0">pořadí ${myRank}. z ${board.length}</p>
-        </div>
+        ${right&&me.lastPts?`<div class="card" style="margin-top:14px;max-width:340px">
+            <p class="muted" style="margin:0">Za tuto otázku</p>
+            <div style="font-size:46px;font-weight:900;color:var(--gold)">+${me.lastPts}</div>
+          </div>`:''}
+        <p class="muted" style="margin-top:18px">Celkové pořadí se ukáže až na konci 🤫</p>
       </div>`;
   }
 
   function renderFinal(g){
-    const board=Object.values(g.players||{}).map(p=>({name:p.name,score:p.score||0})).sort((a,b)=>b.score-a.score);
+    const fb = g.finalBoard||[];
+    const revealed = g.revealed||0;
+    const n=fb.length;
     const me=(g.players&&g.players[pid])||{};
-    const myRank=board.findIndex(p=>p.name===me.name)+1;
-    const top=board[0];
-    const won = top && top.name===me.name;
+    const shownFrom = n - revealed;
+    const allRevealed = revealed>=n && n>0;
+    const myRank = fb.findIndex(p=>p.name===me.name)+1;
+    const won = allRevealed && fb[0] && fb[0].name===me.name;
+
+    let rows='';
+    for(let i=0;i<n;i++){
+      const place=i+1, p=fb[i], isShown=i>=shownFrom;
+      const medal = place===1?'🥇':place===2?'🥈':place===3?'🥉':place+'.';
+      const meHere = p.name===me.name;
+      if(isShown){
+        rows+=`<div class="item ${place<=3?'top1':''}" style="${meHere?'border-color:var(--accent2)':''}">
+            <span class="rank" style="font-size:${place<=3?'24px':'16px'}">${medal}</span>
+            <span class="nm">${esc(p.name)}${meHere?' (ty)':''}</span>
+            <span class="sc">${p.score}</span></div>`;
+      } else {
+        rows+=`<div class="item" style="opacity:.3"><span class="rank">${place}.</span><span class="nm">???</span><span class="sc">—</span></div>`;
+      }
+    }
     app.innerHTML=`
       <div class="center" style="padding:16px">
-        <h1>${won?'🏆 Vyhrál jsi!':'Konec kvízu'}</h1>
-        <div class="card" style="max-width:340px;margin-top:10px">
-          <p class="muted" style="margin:0">Skončil jsi na</p>
-          <div style="font-size:46px;font-weight:900;color:var(--gold)">${myRank}. místě</div>
-          <p style="margin:6px 0 0">se skóre <b>${me.score||0}</b></p>
+        <h1>${allRevealed?(won?'🏆 Vyhrál jsi!':'🏆 Finále'):'Kdo to vyhrál? 🥁'}</h1>
+        ${allRevealed&&myRank?`<p style="margin:0 0 12px">Skončil jsi na <b style="color:var(--gold)">${myRank}. místě</b></p>`:''}
+        <div class="card" style="width:100%;max-width:480px;margin-top:6px">
+          <div class="lb" style="max-width:100%">${rows}</div>
         </div>
-        ${top?`<p class="muted" style="margin-top:14px">Vítěz: <b style="color:var(--gold)">${esc(top.name)}</b> (${top.score})</p>`:''}
       </div>`;
   }
 
