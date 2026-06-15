@@ -139,10 +139,7 @@ const DEFAULT_QS = [
   {q:'Kolik má člověk smyslů (tradičně)?',a:['3','4','5','6'],correct:2},
 ];
 
-/* ============== ROUTER ============== */
-const params = new URLSearchParams(location.search);
-const isHost = params.has('host');
-if(isHost){ Host.init(); } else { Player.init(); }
+/* ROUTER je až na konci souboru, po definici Host i Player */
 </script>
 
 <script>
@@ -569,6 +566,14 @@ const Player = (()=>{
   }
 
   return {init,join,answer};
+})();
+</script>
+
+<script>
+/* ============== ROUTER (až po definici Host i Player) ============== */
+(function(){
+  const params = new URLSearchParams(location.search);
+  if(params.has('host')){ Host.init(); } else { Player.init(); }
 })();
 </script>
 </body>
