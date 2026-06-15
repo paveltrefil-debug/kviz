@@ -93,8 +93,8 @@
   .logo{font-weight:900;letter-spacing:-.02em;font-size:20px}
   .logo span{color:var(--accent2)}
   @media(max-width:560px){ .answers{grid-template-columns:1fr} }
-  .cdnum{font-size:clamp(120px,30vw,260px);font-weight:900;line-height:1;color:var(--gold);animation:pop .9s ease}
-  @keyframes pop{0%{transform:scale(.3);opacity:0}40%{transform:scale(1.15);opacity:1}100%{transform:scale(1)}}
+  .cdnum{font-size:clamp(120px,30vw,260px);font-weight:900;line-height:1;color:var(--gold);animation:tick .9s ease}
+  @keyframes tick{0%{transform:scale(1.18);opacity:.5}100%{transform:scale(1);opacity:1}}
   .lb .item{animation:slidein .4s ease both}
   @keyframes slidein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 </style>
@@ -269,7 +269,7 @@ const Host = (()=>{
     cleanup();
     // fáze odpočtu – synchronizovaně pro hráče i moderátora
     ref.update({ status:'countdown', current:idx });
-    let n=3;
+    let n=10;
     showCountdown(idx,n);
     const cd=setInterval(()=>{
       n--;
@@ -559,7 +559,7 @@ const Player = (()=>{
 
   let shownCdFor=-1;
   function playerCountdown(cur){
-    let n=3;
+    let n=10;
     const draw=()=>{ app.innerHTML=`<div class="center"><span class="pill">Otázka ${cur+1}</span><div class="cdnum">${n}</div><p class="muted">Připrav se…</p></div>`; };
     draw();
     const t=setInterval(()=>{ n--; if(n<=0){clearInterval(t);} else draw(); },1000);
